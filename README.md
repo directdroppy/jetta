@@ -28,11 +28,11 @@ Yapılandırma [codemagic.yaml](codemagic.yaml) dosyasındadır.
 | Workflow | Tetikleyici | Çıktı |
 |---|---|---|
 | `android-apk` | `main` branch'ine push | Release APK (artifact) |
-| `ios-testflight` | `v*` tag'i (örn. `v0.1.0`) | IPA → TestFlight |
+| `ios-testflight` | `main` branch'ine push | İmzalı IPA → TestFlight |
 
 ### İlk kurulum
 
-1. [Codemagic](https://codemagic.io)'te hesap açıp bu GitHub deposunu uygulama olarak ekleyin.
-2. **iOS için:** App Store Connect'te `com.jetta.jetta` bundle ID'li uygulamayı oluşturun. Codemagic'te *Teams → Integrations → App Store Connect* altına bir API anahtarı ekleyin ve adını `jetta-asc-api-key` yapın (veya `codemagic.yaml` içindeki adı değiştirin).
-3. **Android için:** Şimdilik ek kurulum gerekmez. Play Store'a çıkarken keystore oluşturup `codemagic.yaml` içindeki `android_signing` bloğunu açın.
-4. TestFlight'a göndermek için: `git tag v0.1.0 && git push origin v0.1.0`
+1. [Codemagic](https://codemagic.io)'te bu GitHub deposunu uygulama olarak ekleyin.
+2. **iOS imza:** *Teams → Integrations → App Store Connect* altında `jetta-asc-api-key` adlı API anahtarı tanımlı olmalı. Ayrıca uygulamanın *Environment variables* bölümünde `jetta_signing` grubuna `CERTIFICATE_PRIVATE_KEY` (secure) ekleyin — mevcut Apple Distribution sertifikasının private key'i (PEM).
+3. **ASC Apple ID:** App Store Connect'te Jetta uygulamasını oluşturup numerik Apple ID'sini `codemagic.yaml` içindeki `APP_STORE_APPLE_ID` değişkenine yazın.
+4. **Android için:** Ek kurulum gerekmez. Play Store'a çıkarken keystore oluşturup `android_signing` bloğunu açın.

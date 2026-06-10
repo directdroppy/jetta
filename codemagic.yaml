@@ -1,17 +1,26 @@
 # Jetta — Codemagic CI/CD yapılandırması
+# (Yakınlık'ta kanıtlanmış akışla birebir aynı kalıp; Jetta repo kökünde
+#  olduğu için "cd mobile" yok, native eklenti olmadığı için pod install yok.)
 #
-# İki workflow içerir:
-#   1. android-apk     : Her main push'unda imzalı/release APK üretir.
-#   2. ios-testflight  : "v*" tag'i atıldığında IPA derler ve TestFlight'a yükler.
+# 2 workflow:
+#   1. android-apk      → main'e her push'ta release APK üretir.
+#   2. ios-testflight   → main'e her push'ta otomatik imza + TestFlight upload.
 #
-# Kurulum (Codemagic panelinde bir kez yapılır):
-#   - iOS için: Teams > Integrations > App Store Connect'e API anahtarı ekleyin
-#     ve adını "jetta-asc-api-key" koyun (ya da aşağıdaki adı kendi anahtarınızla
-#     değiştirin). Bundle ID (com.jetta.jetta) App Store Connect'te kayıtlı olmalı.
-#   - Android için: Şimdilik Flutter'ın varsayılan debug imzası kullanılır.
-#     Play Store'a çıkarken bir keystore oluşturup "android_signing" bloğunu açın.
+# Otomatik kod imzalama: mevcut Apple Distribution sertifikası
+# CERTIFICATE_PRIVATE_KEY ile EŞLEŞTİRİLEREK getirilir (yeni sertifika
+# YARATILMAZ → limit dolmaz). --create yalnızca eksikse bundle ID kaydını
+# ve provisioning profile'ı oluşturur. `xcode-project use-profiles`
+# export_options.plist'i otomatik üretir; elle plist yazmıyoruz.
+#
+# Codemagic UI'da gerekenler:
+#   - Integrations → App Store Connect: "jetta-asc-api-key" (bağlı ✓)
+#   - Environment variables → group "jetta_signing":
+#       CERTIFICATE_PRIVATE_KEY (secure) — distribution sertifikasının
+#       private key'i (PEM). Yakınlık ile AYNI Apple hesabı/takımı
+#       kullanılıyorsa oradaki değerin AYNISINI kullanın.
 
 workflows:
+  # ─── ANDROID APK ─────────────────────────────────────────────
   android-apk:
     name: Android APK
     instance_type: linux_x2
@@ -32,13 +41,13 @@ workflows:
         - pattern: main
           include: true
     scripts:
-      - name: Bağımlılıkları indir
+      - name: Get packages
         script: flutter pub get
-      - name: Statik analiz
+      - name: Flutter analyze
         script: flutter analyze
-      - name: Testleri çalıştır
+      - name: Run tests
         script: flutter test
-      - name: Release APK derle
+      - name: Build APK
         script: flutter build apk --release --build-number=$PROJECT_BUILD_NUMBER
     artifacts:
       - build/app/outputs/flutter-apk/*.apk
@@ -50,72 +59,107 @@ workflows:
           success: true
           failure: true
 
+  # ─── iOS TESTFLIGHT ──────────────────────────────────────────
   ios-testflight:
-    name: iOS TestFlight
+    name: iOS → TestFlight
     instance_type: mac_mini_m2
     max_build_duration: 60
     integrations:
-      # Codemagic > Teams > Integrations > Apple Developer Portal'da
-      # kayıtlı API anahtarının adı:
+      # Codemagic UI → Teams → Integrations → App Store Connect ile
+      # aynı isimde tanımlı (ekran görüntüsünde bağlı görünen anahtar).
       app_store_connect: jetta-asc-api-key
     environment:
-      groups:
-        # Bu grupta tek bir secure değişken olmalı: CERTIFICATE_PRIVATE_KEY
-        # (dağıtım sertifikası için bir kez üretilen yerel RSA anahtarı).
-        - jetta_signing
-      vars:
-        BUNDLE_ID: "com.jetta.jetta"
       flutter: stable
+      # Apple zorunluluğu (2026): App Store yüklemeleri güncel iOS SDK
+      # (Xcode 26+) ile derlenmiş olmalı.
       xcode: latest
       cocoapods: default
+      # CERTIFICATE_PRIVATE_KEY bu gruptan gelir (Codemagic UI'da secure
+      # env var). Mevcut Apple Distribution sertifikasının private key'i —
+      # yeni sertifika yaratılmasını önler.
+      groups:
+        - jetta_signing
+      vars:
+        # Bunlar gizli değil — doğrudan gömülü.
+        BUNDLE_ID: 'com.jetta.jetta'
+        # App Store Connect'te Jetta uygulamasının NUMERİK Apple ID'si:
+        # ASC → My Apps → Jetta → App Information → Apple ID.
+        # Uygulama ASC'de henüz oluşturulmadıysa önce oluşturun, ID'yi buraya yazın.
+        APP_STORE_APPLE_ID: 'JETTA_ASC_APPLE_ID_BURAYA'
     cache:
       cache_paths:
         - $HOME/.pub-cache
     triggering:
       events:
-        - tag
-      tag_patterns:
-        - pattern: 'v*'
+        - push
+      branch_patterns:
+        # main'e her push → otomatik iOS build + TestFlight upload.
+        - pattern: main
           include: true
     scripts:
-      - name: Keychain hazırla
-        script: keychain initialize
-      - name: İmzalama dosyalarını getir / oluştur
-        # --create: bundle ID portalda kayıtlı değilse KAYDEDER, dağıtım
-        # sertifikası ve App Store provisioning profili yoksa OLUŞTURUR.
-        # Kimlik doğrulama, yukarıdaki app_store_connect entegrasyonundan gelir.
+      - name: Get packages
+        script: flutter pub get
+      - name: Flutter analyze
+        script: flutter analyze
+      - name: Run tests
+        script: flutter test
+      - name: Set up code signing (reuse existing distribution cert)
         script: |
+          # API key, integrations.app_store_connect üzerinden otomatik gelir.
+          keychain initialize
+
+          if [ -z "$CERTIFICATE_PRIVATE_KEY" ]; then
+            echo "HATA: CERTIFICATE_PRIVATE_KEY env var tanımlı değil."
+            echo "Distribution sertifikasının private key'ini (PEM) Codemagic'e"
+            echo "secure env var olarak ekle (group: jetta_signing)."
+            exit 1
+          fi
+
+          # Mevcut distribution sertifikasını private key ile EŞLEŞTİREREK getir.
+          # Key zaten var olan bir sertifikaya ait olduğundan YENİ SERTİFİKA
+          # YARATILMAZ → limit dolmaz, diğer uygulamalar/sertifikalar etkilenmez.
+          # --create yalnızca eksikse bundle ID kaydını ve provisioning
+          # profile'ı oluşturur.
           app-store-connect fetch-signing-files "$BUNDLE_ID" \
             --type IOS_APP_STORE \
+            --certificate-key=@env:CERTIFICATE_PRIVATE_KEY \
             --create
-      - name: Sertifikaları keychain'e ekle
-        script: keychain add-certificates
-      - name: Profilleri Xcode projesine uygula
-        script: xcode-project use-profiles
-      - name: Bağımlılıkları indir
-        script: flutter pub get
-      - name: Statik analiz ve testler
+          keychain add-certificates
+          xcode-project use-profiles
+      - name: Set build number
         script: |
-          flutter analyze
-          flutter test
-      - name: IPA derle
+          # Her TestFlight upload'u benzersiz build number ister.
+          BUILD_NUMBER=$(($(app-store-connect get-latest-testflight-build-number "$APP_STORE_APPLE_ID" 2>/dev/null || echo 0) + 1))
+          echo "Using build number $BUILD_NUMBER"
+          echo "BUILD_NUMBER=$BUILD_NUMBER" >> $CM_ENV
+      - name: Build iOS (signed IPA)
         script: |
+          # --export-options-plist KRİTİK: Flutter'ın "development certificate"
+          # arayan otomatik imza kontrolünü atlatır; use-profiles'in ürettiği
+          # distribution export ayarını ($HOME/export_options.plist) kullanır.
           flutter build ipa --release \
-            --build-number=$PROJECT_BUILD_NUMBER \
-            --export-options-plist=/Users/builder/export_options.plist
+            --build-number=$BUILD_NUMBER \
+            --export-options-plist=$HOME/export_options.plist
     artifacts:
       - build/ios/ipa/*.ipa
       - /tmp/xcodebuild_logs/*.log
     publishing:
-      app_store_connect:
-        auth: integration
-        submit_to_testflight: true
-        # TestFlight'ta beta grubu oluşturduysanız adını buraya yazın:
-        # beta_groups:
-        #   - Jetta Beta
       email:
         recipients:
           - nazantrhs@gmail.com
         notify:
           success: true
           failure: true
+      app_store_connect:
+        auth: integration
+        submit_to_testflight: true
+        # İÇ TEST (internal) — VARSAYILAN, en hızlı yol:
+        # beta_groups YOK → build TestFlight'a yüklenir; ASC'de eklediğin İÇ
+        # test kullanıcıları build'i incelemesiz, birkaç dakikada görür.
+        #
+        # DIŞ TEST (external) — başkalarını davet etmek istersen:
+        #   1) ASC → TestFlight → External Testing → 'Jetta Beta' grubunu yarat.
+        #   2) Test Information'ı doldur (Feedback Email + Beta App Review bilgileri).
+        #   3) Aşağıdaki iki satırı aç:
+        # beta_groups:
+        #   - 'Jetta Beta'
