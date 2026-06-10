@@ -55,13 +55,16 @@ workflows:
     instance_type: mac_mini_m2
     max_build_duration: 60
     integrations:
-      # Codemagic > Teams > Integrations > App Store Connect bölümünde
-      # eklediğiniz API anahtarının adı:
+      # Codemagic > Teams > Integrations > Apple Developer Portal'da
+      # kayıtlı API anahtarının adı:
       app_store_connect: jetta-asc-api-key
     environment:
-      ios_signing:
-        distribution_type: app_store
-        bundle_identifier: com.jetta.jetta
+      groups:
+        # Bu grupta tek bir secure değişken olmalı: CERTIFICATE_PRIVATE_KEY
+        # (dağıtım sertifikası için bir kez üretilen yerel RSA anahtarı).
+        - jetta_signing
+      vars:
+        BUNDLE_ID: "com.jetta.jetta"
       flutter: stable
       xcode: latest
       cocoapods: default
@@ -75,14 +78,26 @@ workflows:
         - pattern: 'v*'
           include: true
     scripts:
+      - name: Keychain hazırla
+        script: keychain initialize
+      - name: İmzalama dosyalarını getir / oluştur
+        # --create: bundle ID portalda kayıtlı değilse KAYDEDER, dağıtım
+        # sertifikası ve App Store provisioning profili yoksa OLUŞTURUR.
+        # Kimlik doğrulama, yukarıdaki app_store_connect entegrasyonundan gelir.
+        script: |
+          app-store-connect fetch-signing-files "$BUNDLE_ID" \
+            --type IOS_APP_STORE \
+            --create
+      - name: Sertifikaları keychain'e ekle
+        script: keychain add-certificates
+      - name: Profilleri Xcode projesine uygula
+        script: xcode-project use-profiles
       - name: Bağımlılıkları indir
         script: flutter pub get
       - name: Statik analiz ve testler
         script: |
           flutter analyze
           flutter test
-      - name: Code signing profillerini uygula
-        script: xcode-project use-profiles
       - name: IPA derle
         script: |
           flutter build ipa --release \
