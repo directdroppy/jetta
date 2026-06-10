@@ -1,0 +1,38 @@
+# Jetta 🚛
+
+Türkiye'nin dijital yük ve tır eşleştirme platformu — "yük taşımacılığında Uber" MVP prototipi.
+
+Flutter ile geliştirilmiştir (iOS + Android). Şu an mock verilerle çalışan, backend'siz bir prototiptir.
+
+## Özellikler
+
+- **İki rol:** Yük veren (ilan açar, teklifleri karşılaştırır, aracı atar) ve şoför/nakliyeci (yük pazarını gezer, teklif verir, taşımayı yönetir)
+- 3 adımlı yük ilanı sihirbazı (güzergâh → yük bilgisi → tarih & bütçe)
+- Şehir/araç tipi filtreli yük pazarı, km başına kazanç hesabı
+- Teklif karşılaştırma ("en iyi fiyat" rozeti) ve canlı taşıma durumu zaman çizelgesi
+- "Gece Otoyolu" tasarım dili: plaka rozetleri, animasyonlu rota çizgileri, ikaz şeridi desenleri
+
+## Geliştirme
+
+```bash
+flutter pub get
+flutter run          # bağlı cihaz/emülatörde çalıştırır
+flutter analyze      # statik analiz
+flutter test         # widget testleri
+```
+
+## CI/CD (Codemagic)
+
+Yapılandırma [codemagic.yaml](codemagic.yaml) dosyasındadır.
+
+| Workflow | Tetikleyici | Çıktı |
+|---|---|---|
+| `android-apk` | `main` branch'ine push | Release APK (artifact) |
+| `ios-testflight` | `v*` tag'i (örn. `v0.1.0`) | IPA → TestFlight |
+
+### İlk kurulum
+
+1. [Codemagic](https://codemagic.io)'te hesap açıp bu GitHub deposunu uygulama olarak ekleyin.
+2. **iOS için:** App Store Connect'te `com.jetta.jetta` bundle ID'li uygulamayı oluşturun. Codemagic'te *Teams → Integrations → App Store Connect* altına bir API anahtarı ekleyin ve adını `jetta-asc-api-key` yapın (veya `codemagic.yaml` içindeki adı değiştirin).
+3. **Android için:** Şimdilik ek kurulum gerekmez. Play Store'a çıkarken keystore oluşturup `codemagic.yaml` içindeki `android_signing` bloğunu açın.
+4. TestFlight'a göndermek için: `git tag v0.1.0 && git push origin v0.1.0`

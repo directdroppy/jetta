@@ -1,0 +1,106 @@
+# Jetta — Codemagic CI/CD yapılandırması
+#
+# İki workflow içerir:
+#   1. android-apk     : Her main push'unda imzalı/release APK üretir.
+#   2. ios-testflight  : "v*" tag'i atıldığında IPA derler ve TestFlight'a yükler.
+#
+# Kurulum (Codemagic panelinde bir kez yapılır):
+#   - iOS için: Teams > Integrations > App Store Connect'e API anahtarı ekleyin
+#     ve adını "jetta-asc-api-key" koyun (ya da aşağıdaki adı kendi anahtarınızla
+#     değiştirin). Bundle ID (com.jetta.jetta) App Store Connect'te kayıtlı olmalı.
+#   - Android için: Şimdilik Flutter'ın varsayılan debug imzası kullanılır.
+#     Play Store'a çıkarken bir keystore oluşturup "android_signing" bloğunu açın.
+
+workflows:
+  android-apk:
+    name: Android APK
+    instance_type: linux_x2
+    max_build_duration: 45
+    environment:
+      flutter: stable
+      java: 17
+      # Play Store imzası için keystore eklediğinizde bu bloğu açın:
+      # android_signing:
+      #   - jetta_keystore
+    cache:
+      cache_paths:
+        - $HOME/.pub-cache
+    triggering:
+      events:
+        - push
+      branch_patterns:
+        - pattern: main
+          include: true
+    scripts:
+      - name: Bağımlılıkları indir
+        script: flutter pub get
+      - name: Statik analiz
+        script: flutter analyze
+      - name: Testleri çalıştır
+        script: flutter test
+      - name: Release APK derle
+        script: flutter build apk --release --build-number=$PROJECT_BUILD_NUMBER
+    artifacts:
+      - build/app/outputs/flutter-apk/*.apk
+    publishing:
+      email:
+        recipients:
+          - nazantrhs@gmail.com
+        notify:
+          success: true
+          failure: true
+
+  ios-testflight:
+    name: iOS TestFlight
+    instance_type: mac_mini_m2
+    max_build_duration: 60
+    integrations:
+      # Codemagic > Teams > Integrations > App Store Connect bölümünde
+      # eklediğiniz API anahtarının adı:
+      app_store_connect: jetta-asc-api-key
+    environment:
+      ios_signing:
+        distribution_type: app_store
+        bundle_identifier: com.jetta.jetta
+      flutter: stable
+      xcode: latest
+      cocoapods: default
+    cache:
+      cache_paths:
+        - $HOME/.pub-cache
+    triggering:
+      events:
+        - tag
+      tag_patterns:
+        - pattern: 'v*'
+          include: true
+    scripts:
+      - name: Bağımlılıkları indir
+        script: flutter pub get
+      - name: Statik analiz ve testler
+        script: |
+          flutter analyze
+          flutter test
+      - name: Code signing profillerini uygula
+        script: xcode-project use-profiles
+      - name: IPA derle
+        script: |
+          flutter build ipa --release \
+            --build-number=$PROJECT_BUILD_NUMBER \
+            --export-options-plist=/Users/builder/export_options.plist
+    artifacts:
+      - build/ios/ipa/*.ipa
+      - /tmp/xcodebuild_logs/*.log
+    publishing:
+      app_store_connect:
+        auth: integration
+        submit_to_testflight: true
+        # TestFlight'ta beta grubu oluşturduysanız adını buraya yazın:
+        # beta_groups:
+        #   - Jetta Beta
+      email:
+        recipients:
+          - nazantrhs@gmail.com
+        notify:
+          success: true
+          failure: true
