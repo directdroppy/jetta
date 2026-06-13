@@ -102,12 +102,8 @@ class _CreateLoadScreenState extends State<CreateLoadScreen> {
   }
 
   Future<void> _pickCity(bool isFrom) async {
-    final city = await showModalBottomSheet<String>(
-      context: context,
-      isScrollControlled: true,
-      builder: (_) => _CityPicker(
-          title: isFrom ? 'Nereden yüklenecek?' : 'Nereye gidecek?'),
-    );
+    final city = await showCityPickerSheet(
+        context, isFrom ? 'Nereden yüklenecek?' : 'Nereye gidecek?');
     if (city != null) {
       setState(() => isFrom ? _fromCity = city : _toCity = city);
     }
@@ -514,98 +510,6 @@ class _CityField extends StatelessWidget {
             if (city != null) PlateBadge(city: city!, size: 0.8),
           ],
         ),
-      ),
-    );
-  }
-}
-
-class _CityPicker extends StatefulWidget {
-  const _CityPicker({required this.title});
-  final String title;
-
-  @override
-  State<_CityPicker> createState() => _CityPickerState();
-}
-
-class _CityPickerState extends State<_CityPicker> {
-  String _query = '';
-
-  @override
-  Widget build(BuildContext context) {
-    final cities = allCities
-        .where((c) => c.toLowerCase().contains(_query.toLowerCase()))
-        .toList();
-    return DraggableScrollableSheet(
-      expand: false,
-      initialChildSize: 0.78,
-      maxChildSize: 0.92,
-      builder: (context, scroll) => Column(
-        children: [
-          const SizedBox(height: 12),
-          Container(
-            width: 44,
-            height: 4,
-            decoration: BoxDecoration(
-              color: JColors.line,
-              borderRadius: BorderRadius.circular(4),
-            ),
-          ),
-          Padding(
-            padding: const EdgeInsets.fromLTRB(24, 20, 24, 12),
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Text(widget.title, style: JText.title(19)),
-                const SizedBox(height: 14),
-                TextField(
-                  autofocus: false,
-                  style: JText.body(15),
-                  onChanged: (v) => setState(() => _query = v),
-                  decoration: const InputDecoration(
-                    hintText: 'Şehir ara…',
-                    prefixIcon:
-                        Icon(Icons.search_rounded, color: JColors.textFaint),
-                  ),
-                ),
-              ],
-            ),
-          ),
-          Expanded(
-            child: ListView.builder(
-              controller: scroll,
-              padding: const EdgeInsets.fromLTRB(24, 0, 24, 24),
-              itemCount: cities.length,
-              itemBuilder: (context, i) {
-                final city = cities[i];
-                return GestureDetector(
-                  onTap: () {
-                    HapticFeedback.selectionClick();
-                    Navigator.of(context).pop(city);
-                  },
-                  child: Container(
-                    margin: const EdgeInsets.only(bottom: 8),
-                    padding: const EdgeInsets.symmetric(
-                        horizontal: 14, vertical: 11),
-                    decoration: BoxDecoration(
-                      color: JColors.surfaceHi,
-                      borderRadius: BorderRadius.circular(14),
-                      border: Border.all(color: JColors.line),
-                    ),
-                    child: Row(
-                      children: [
-                        PlateBadge(city: city, size: 0.75),
-                        const SizedBox(width: 14),
-                        Text(city,
-                            style:
-                                JText.body(15, weight: FontWeight.w600)),
-                      ],
-                    ),
-                  ),
-                );
-              },
-            ),
-          ),
-        ],
       ),
     );
   }

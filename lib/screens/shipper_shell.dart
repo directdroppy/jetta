@@ -6,6 +6,7 @@ import '../theme.dart';
 import '../widgets.dart';
 import 'create_load_screen.dart';
 import 'load_detail_screen.dart';
+import 'map_home_screen.dart';
 import 'profile_screen.dart';
 
 class ShipperShell extends StatefulWidget {
@@ -21,17 +22,19 @@ class _ShipperShellState extends State<ShipperShell> {
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      body: SafeArea(
-        bottom: false,
-        child: IndexedStack(
-          index: _tab,
-          children: const [_MyLoadsTab(), ProfileTab()],
-        ),
+      body: IndexedStack(
+        index: _tab,
+        children: const [
+          MapHomeScreen(),
+          SafeArea(bottom: false, child: _MyLoadsTab()),
+          SafeArea(bottom: false, child: ProfileTab()),
+        ],
       ),
       bottomNavigationBar: SafeArea(
         child: JBottomNav(
           index: _tab,
           items: const [
+            (Icons.explore_outlined, 'Harita'),
             (Icons.inventory_2_outlined, 'Yüklerim'),
             (Icons.person_outline, 'Profil'),
           ],
@@ -39,7 +42,7 @@ class _ShipperShellState extends State<ShipperShell> {
         ),
       ),
       floatingActionButtonLocation: FloatingActionButtonLocation.centerFloat,
-      floatingActionButton: _tab == 0
+      floatingActionButton: _tab == 1
           ? Padding(
               padding: const EdgeInsets.only(bottom: 78),
               child: SizedBox(
