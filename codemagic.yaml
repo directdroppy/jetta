@@ -128,17 +128,23 @@ workflows:
           xcode-project use-profiles
       - name: Set build number
         script: |
-          # Her TestFlight upload'u benzersiz build number ister.
-          BUILD_NUMBER=$(($(app-store-connect get-latest-testflight-build-number "$APP_STORE_APPLE_ID" 2>/dev/null || echo 0) + 1))
-          echo "Using build number $BUILD_NUMBER"
-          echo "BUILD_NUMBER=$BUILD_NUMBER" >> $CM_ENV
+          # Her TestFlight upload'u benzersiz ve ARTAN bir build number ister.
+          # Once App Store Connect'teki son TestFlight numarasini dene; APP_STORE_APPLE_ID
+          # gercek/dolu degilse bu sorgu basarisiz olur (-> 0). Bu durumda Codemagic'in
+          # kendi otomatik artan $BUILD_NUMBER sayacini taban alarak collision'i onleriz.
+          LATEST=$(app-store-connect get-latest-testflight-build-number "$APP_STORE_APPLE_ID" 2>/dev/null || echo 0)
+          NEXT=$((LATEST + 1))
+          CM=${BUILD_NUMBER:-1}
+          if [ "$CM" -gt "$NEXT" ]; then NEXT=$CM; fi
+          echo "Build number: $NEXT (testflight_latest=$LATEST, codemagic_counter=$CM)"
+          echo "NEW_BUILD_NUMBER=$NEXT" >> $CM_ENV
       - name: Build iOS (signed IPA)
         script: |
           # --export-options-plist KRİTİK: Flutter'ın "development certificate"
           # arayan otomatik imza kontrolünü atlatır; use-profiles'in ürettiği
           # distribution export ayarını ($HOME/export_options.plist) kullanır.
           flutter build ipa --release \
-            --build-number=$BUILD_NUMBER \
+            --build-number=$NEW_BUILD_NUMBER \
             --export-options-plist=$HOME/export_options.plist
     artifacts:
       - build/ios/ipa/*.ipa
